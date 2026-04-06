@@ -1,0 +1,355 @@
+create database  Air_Ticket_Reservation_system ;
+
+use Air_Ticket_Reservation_system;
+
+CREATE SEQUENCE passengers_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO CYCLE;
+
+CREATE TABLE Passengers(
+PassengerID INT DEFAULT NEXT VALUE FOR passengers_id_seq PRIMARY KEY,
+Name VARCHAR(50),
+Age INT,
+Gender VARCHAR(50),
+Email VARCHAR(50),
+Phone VARCHAR(50));
+
+INSERT INTO Passengers(Name, Age, Gender, Email, Phone) VALUES 
+('John Doe', 50, 'male', 'john@example.com', '514-209-2289'),
+('Jane Smith', 60, 'female', 'jane@example.com', '514-309-3289'),
+('Alice Johnson', 20, 'female', 'alice@example.com', '514-449-3249'),
+('Bob Brown', 30, 'male', 'bob@example.com', '438-649-6679'),
+('Emily Davis', 35, 'female', 'alice@example.com', '494-449-8249');
+
+
+CREATE SEQUENCE flight_id_seq
+START WITH 1
+INCREMENT BY 1
+NO CYCLE;
+
+CREATE TABLE Flights(
+FlightID INT DEFAULT NEXT VALUE FOR flight_id_seq PRIMARY KEY,
+DepartureCity VARCHAR(50),
+ArrivalCity VARCHAR(50),
+DepartureTime DATE,
+ArrivalTime DATE,
+Airline VARCHAR(50),
+Price DECIMAL(10,2));
+
+INSERT INTO Flights (DepartureCity, ArrivalCity, DepartureTime, ArrivalTime, Airline, Price) VALUES
+('New York', 'Los Angeles', '2024-06-10 09:00:00','2024-06-10 11:00:00', 'American', 250.00),
+('Montreal', 'Ottawa', '2024-06-12 10:00:00', '2024-06-12 14:00:00', 'Delta', 180.00),
+('Ottawa', 'Montreal', '2024-05-15 13:00:00', '2024-05-18 16:00:00', 'United', 300.00), 
+('Calgary', 'Toronto', '2024-05-18 09:00:00', '2024-05-18 14:00:00', 'Southwest',350.00),
+('Toronto', 'Montreal', '2024-06-20 15:00:00', '2024-06-20 19:00:00', 'Jetblue', 280.00);
+
+
+CREATE SEQUENCE bookings_id_seq
+START WITH 100
+INCREMENT BY 1
+NO CYCLE;
+
+CREATE TABLE Bookings(
+BookingID INT DEFAULT NEXT VALUE FOR bookings_id_seq PRIMARY KEY,
+PassengerID INT FOREIGN KEY REFERENCES Passengers,
+FlightID INT FOREIGN KEY REFERENCES Flights,
+BookingDate DATE,
+SeatNumber INT);
+
+INSERT INTO Bookings (PassengerID,FlightID,BookingDate,SeatNumber)VALUES
+(1,1,'2024-05-05',20),
+(2,2,'2024-05-06',15),
+(3,3,'2024-05-07',12),
+(4,4,'2024-05-01',5),
+(5,5,'2024-06-03',3);
+
+
+CREATE SEQUENCE payments_id_seq
+START WITH 10
+INCREMENT BY 1
+NO CYCLE;
+
+CREATE TABLE Payments(
+PaymentID INT DEFAULT NEXT VALUE FOR payments_id_seq  PRIMARY KEY,
+BookingID INT FOREIGN KEY REFERENCES Bookings,
+Amount DECIMAL(10,2),
+PaymentDate DATE,
+PaymentMethod VARCHAR(50) CHECK (PaymentMethod = 'Credit Card' 
+or PaymentMethod = 'Debit Card' or PaymentMethod = 'PayPal' or
+PaymentMethod = 'Pending'));
+
+INSERT INTO Payments(BookingID,Amount,PaymentDate,PaymentMethod)VALUES
+(100,'150.00','2024-05-10','Credit Card'),
+(101,'200.00','2024-05-06','Debit Card'),
+(102,'300.00','2024-05-07','Paypal'),
+(103,'250.00','2024-05-01','Pending'),
+(104,'350.00','2024-06-03','Pending');
+
+
+
+--1 Find out all passengers with bookings on flights departing from, for example, Ottawa.
+SELECT Passengers.*
+FROM Passengers
+JOIN Bookings ON Passengers.PassengerID = Bookings.PassengerID
+JOIN Flights ON Bookings.FlightID = Flights.FlightID
+WHERE Flights.DepartureCity = 'Ottawa';
+
+--2  Find out all bookings with payments made using Credit Card
+SELECT * FROM Bookings 
+Join Payments ON Bookings.BookingID = Payments.BookingID WHERE PaymentMethod = 'Credit Card';
+
+--3  Find out all passengers who have made payments (using EXISTS)
+SELECT *From Passengers 
+WHERE EXISTS(SELECT * From Payments 
+JOIN Bookings 
+ON Payments.BookingID = Bookings.BookingID
+WHERE Passengers.PassengerID = Bookings.PassengerID);
+
+--4 Find out all passengers who have not made any payments (using NOT EXISTS).
+SELECT *From Passengers 
+WHERE NOT EXISTS(SELECT * From Payments 
+JOIN Bookings 
+ON Payments.BookingID = Bookings.BookingID
+WHERE Passengers.PassengerID = Bookings.PassengerID);
+
+/*5 Create a view WITH CHECK OPTION called DomesticFlights that only shows flights within a
+specific country. For example, flights to or from Montreal, Calgary, Ottawa, and Toronto would
+be domestic flights in Canada.*/
+CREATE VIEW DomesticFlights
+AS SELECT * FROM Flights
+WHERE DepartureCity IN ('Montreal', 'Calgary', 'Ottawa', 'Toronto') OR
+      ArrivalCity IN ('Montreal', 'Calgary', 'Ottawa', 'Toronto')
+WITH CHECK OPTION;
+
+ Select *FROM DomesticFlights;--domestic to Cannada
+
+ --6 Create an index on the bookings table that includes PassengerID and FlightID.
+ CREATE INDEX Passengerflightindex on Bookings(PassengerID,FlightID);
+SELECT * FROM Bookings WHERE PassengerID = 1;--for fast retrieval  
+
+--7 /* Create a function to find and show the total number of bookings for a given Passenger
+(PassengerID as input).*/
+CREATE FUNCTION dbo.GetTotalBookingsForPassenger (@PassengerID INT)
+RETURNS INT
+AS
+BEGIN
+    DECLARE @TotalBookings INT;
+    
+    SELECT @TotalBookings = COUNT(*) 
+    FROM bookings 
+    WHERE PassengerID = @PassengerID;
+    
+    RETURN @TotalBookings;
+END;
+
+SELECT dbo.GetTotalBookingsForPassenger(1)AS TotalBookingsForPassenger1; 
+
+--8 Create a function to find and show the total revenue generated by a flight (FlightID as input).
+CREATE FUNCTION dbo.GetTotalRevenueForFlights (@FlightID INT)
+RETURNS DECIMAL(10, 2)
+AS
+BEGIN
+    DECLARE @TotalRevenue DECIMAL(10, 2);
+
+    SELECT @TotalRevenue = SUM(Amount) 
+    FROM payments 
+    JOIN Bookings ON Bookings.BookingID = Payments.BookingID
+    WHERE Bookings.FlightID = @FlightID;
+    RETURN @TotalRevenue;
+END;
+
+SELECT dbo.GetTotalRevenueForFlights(1) AS TotalRevenueForFlight1;
+
+--9 Create a function that returns all flights booked by a specific passenger (PassengerID as input).
+CREATE FUNCTION dbo.GetTotalFlightsBookedByPassengers (@PassengerID INT)
+RETURNS INT
+AS
+BEGIN
+    DECLARE @TotalFlights INT;
+
+    SELECT @TotalFlights = COUNT(*)
+    FROM Flights
+    JOIN Bookings ON Flights.FlightID = Bookings.FlightID
+    WHERE Bookings.PassengerID = @PassengerID;
+
+    RETURN @TotalFlights;
+END;
+
+SELECT dbo.GetTotalFlightsBookedByPassengers(1) AS TotalFlightsBookedByPassenger1;
+
+
+--10 Create a function that returns all bookings made for a given flight (FlightID as input).
+CREATE FUNCTION dbo.GetBookingsForFlight (@FlightID INT)
+RETURNS TABLE
+AS
+RETURN (
+    SELECT Bookings.*
+    FROM Bookings
+    WHERE FlightID = @FlightID
+);
+SELECT * FROM GetBookingsForFlight(1);
+
+/*11  Create a function to return passengers with bookings on flights departing from a specific city
+(DepartureCity as input)*/
+CREATE FUNCTION dbo.GetPassengersForDepartureCity (@DepartureCity VARCHAR(50))
+RETURNS TABLE
+AS
+RETURN (
+    SELECT Passengers.*
+    FROM Passengers
+    JOIN Bookings ON Passengers.PassengerID = Bookings.PassengerID
+    JOIN Flights ON Bookings.FlightID = Flights.FlightID
+    WHERE Flights.DepartureCity = @DepartureCity
+);
+
+SELECT * From dbo.GetPassengersForDepartureCity('Toronto');
+
+--12  Create a function that calculates total revenue generated by each airline
+CREATE FUNCTION dbo.GetTotalRevenueByAirline ()
+RETURNS TABLE
+AS
+RETURN (
+    SELECT Airline, SUM(Amount) AS TotalRevenue
+    FROM Flights
+    JOIN Bookings ON Flights.FlightID = Bookings.FlightID
+    JOIN Payments ON Bookings.BookingID = Payments.BookingID
+    GROUP BY Airline
+);
+select * from dbo.GetTotalRevenueByAirline();
+
+--13  Create and run a stored procedure that inserts a new passenger (input all information).
+CREATE PROCEDURE InsertNewPassenger
+    @Name VARCHAR(50),
+    @Age INT,
+    @Gender VARCHAR(50),
+    @Email VARCHAR(50),
+    @Phone VARCHAR(50)
+AS
+BEGIN
+    INSERT INTO Passengers (Name, Age, Gender, Email, Phone)
+    VALUES (@Name, @Age, @Gender, @Email, @Phone);
+END;
+
+EXEC InsertNewPassenger 'Selene Smith', 60, 'female','selene@example.com','514-329-3289';
+
+/*14  Create and run a stored procedure that updates the departure time of a flight. (FlightID and the
+new departure time as input)*/
+CREATE PROCEDURE UpdateFlightDepartureTime
+    @FlightID INT,
+    @NewDepartureTime DATETIME
+AS
+BEGIN
+    UPDATE Flights
+    SET DepartureTime = @NewDepartureTime
+    WHERE FlightID = @FlightID;
+END;
+
+EXEC UpdateFlightDepartureTime 1,'2024-06-10 19:00:00';
+
+/*15 Create and run a stored procedure that gets bookings made by a specific passenger
+(PassengerID as input).
+*/
+CREATE PROCEDURE GetBookingsForPassenger
+    @PassengerID INT
+AS
+BEGIN
+    SELECT *
+    FROM Bookings
+    WHERE PassengerID = @PassengerID;
+END;
+
+EXEC GetBookingsForPassenger 1;
+
+--16 Create and run a stored temporary procedure that inserts a new booking (input all information)
+CREATE PROCEDURE #InsertNewBooking
+    @PassengerID INT,
+    @FlightID INT,
+    @BookingDate DATE,
+    @SeatNumber INT
+AS
+BEGIN
+    INSERT INTO Bookings (PassengerID, FlightID, BookingDate, SeatNumber)
+    VALUES (@PassengerID, @FlightID, @BookingDate, @SeatNumber);
+END;
+
+EXEC #InsertNewBooking 6, 6,'2024-09-05',40;
+
+--17 Create and run a stored temporary procedure that gets all flights departing from a specific city.
+CREATE PROCEDURE #GetFlightsFromCity
+    @DepartureCity VARCHAR(50)
+AS
+BEGIN
+    SELECT *
+    FROM Flights
+    WHERE DepartureCity = @DepartureCity;
+END;
+EXEC #GetFlightsFromCity 'Montreal';
+
+--18 Create an After Insert Trigger to show and get updated total revenue from payments table.
+CREATE TRIGGER UpdateTotalRevenueAfterInsert
+ON Payments
+AFTER INSERT 
+AS
+BEGIN
+    DECLARE @TotalRevenue DECIMAL(10, 2);
+    SELECT @TotalRevenue = SUM(Amount) FROM inserted;
+    PRINT 'Total revenue updated: ' + CAST(@TotalRevenue AS VARCHAR(20));
+END;
+
+INSERT INTO Payments(BookingID,Amount,PaymentDate,PaymentMethod)VALUES
+(107,'150.00','2024-05-10','Paypal');--for checking
+
+--19 Create an After Update Trigger to update passenger age in passengers table.
+CREATE TRIGGER UpdatePassengerAgeAfterUpdates
+ON Passengers
+AFTER UPDATE
+AS
+BEGIN 
+    IF UPDATE (Age)
+    PRINT 'Passenger age updated';
+END;
+
+UPDATE passengers set age = 2 where Name = 'Selene Smith';
+
+/*20  Create a view of Bookings table. Then, write an Instead Of Insert Trigger on this view that when
+fired will prompt a message 'This operation is not allowed on Bookings table'*/
+CREATE VIEW BookingsView AS
+SELECT * FROM Bookings;
+
+CREATE TRIGGER InsteadOfInsertOnBookingsView
+ ON BookingsView
+ INSTEAD OF INSERT
+ AS
+BEGIN
+   
+    PRINT 'This operation is not allowed on Bookings table';
+    -- prevent insert
+    ROLLBACK;
+END;
+
+/*21 Create an Instead of Insert Trigger to avoid inserting data into passengers table and prompt an
+appropriate message.*/
+CREATE TRIGGER InsteadOfInsertOnPassengers
+ ON Passengers
+ INSTEAD OF INSERT
+ AS
+BEGIN
+    PRINT 'Insert operation not allowed on Passengers table';
+    ROLLBACK;
+END;
+
+/*22 Write a Trigger that avoids creating, altering, and dropping the tables in database and prompts an
+appropriate message. Then, test if the trigger functions properly. */ 
+CREATE TRIGGER PreventDDLChanges
+ON DATABASE
+FOR CREATE_TABLE, ALTER_TABLE, DROP_TABLE
+AS
+BEGIN
+    PRINT 'DDL changes are not allowed on this database';
+    -- prevent DDL change
+    ROLLBACK;
+END;
+--testing the DDL changes
+CREATE TABLE passport (
+passport_id INT PRIMARY KEY, TYPE varchar(50));
